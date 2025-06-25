@@ -54,4 +54,4 @@ def update(frame):
     return img,
 
 ani = FuncAnimation(fig, update, frames=n_steps, interval=100, blit=True)
-ani.save("diffusion.gif", writer="Pillow")
+ani.save("diffusion.gif")
