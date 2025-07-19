@@ -107,9 +107,9 @@ class FlatusSimulator:
         plt.close(self.fig)
 
 if __name__ == "__main__":
-    SOURCE_CHOICE_1_to_9 = 5
-    WIND_ANGLE_DEGREES = 225.0
-    PLAYBACK_FACTOR = 4.0
+    SOURCE_CHOICE_1_to_9 = 1
+    WIND_ANGLE_DEGREES = 300
+    PLAYBACK_FACTOR = 1
     simulator = FlatusSimulator(
         source_choice_1_to_9=SOURCE_CHOICE_1_to_9,
         wind_angle_degrees=WIND_ANGLE_DEGREES
