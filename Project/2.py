@@ -1,99 +1,107 @@
+# -*- coding: utf-8 -*-
+"""
+Simulation of Flatus Dispersion with Initial Velocity in a 2D Confined Space.
+
+VERSION 3: Stable Upwind Scheme
+
+This version replaces the unstable Central Difference Scheme with a First-Order
+Upwind Scheme for the advection term. This eliminates numerical oscillations
+and provides a much more physically realistic simulation of the gas cloud.
+"""
+
 import numpy as np
-import scipy.sparse as sp
 import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation, PillowWriter
+from matplotlib.animation import FuncAnimation
 
-# Domain parameters
-Lx, Ly = 1.0, 1.0
-Nx, Ny = 50, 50
-dx, dy = Lx/(Nx-1), Ly/(Ny-1)
+# --- 1. Simulation Parameters (Identical to before) ---
+WIDTH, HEIGHT = 10.0, 10.0
+NX, NY = 101, 101
+TOTAL_TIME = 200.0
+DT = 0.1 # Using a slightly smaller DT can also improve stability
+NT = int(TOTAL_TIME / DT)
+D = 0.01
+C0 = 1.0
+X0, Y0 = 2.0, 5.0
+SIGMA = 0.2
+UX_INITIAL = 0.5
+UY_INITIAL = 0.0
+DECAY_RATE = 0.01
 
-# Physical parameters
-D = 0.01  # diffusion coefficient
-vx, vy = 3.0, 0.0  # advection velocities
-
-# 1) Build diffusion (Laplacian) operator with Neumann BC
-
-# x-direction 1D Laplacian with zero-flux at boundaries
-Ax = sp.lil_matrix((Nx, Nx))
-for i in range(1, Nx-1):
-    Ax[i, i-1] = 1.0
-    Ax[i, i]   = -2.0
-    Ax[i, i+1] = 1.0
-# Left boundary (i=0): (c1 - c0) * 2 / dx^2
-Ax[0, 0] = -2.0
-Ax[0, 1] =  2.0
-# Right boundary (i=Nx-1)
-Ax[-1, -2] = 2.0
-Ax[-1, -1] = -2.0
-Ax = Ax.tocsr() / dx**2
-
-# y-direction 1D Laplacian
-Ay = sp.lil_matrix((Ny, Ny))
-for j in range(1, Ny-1):
-    Ay[j, j-1] = 1.0
-    Ay[j, j]   = -2.0
-    Ay[j, j+1] = 1.0
-# Bottom boundary (j=0)
-Ay[0, 0] = -2.0
-Ay[0, 1] =  2.0
-# Top boundary (j=Ny-1)
-Ay[-1, -2] = 2.0
-Ay[-1, -1] = -2.0
-Ay = Ay.tocsr() / dy**2
-
-Ix = sp.eye(Nx, format='csr')
-Iy = sp.eye(Ny, format='csr')
-Laplacian = sp.kron(Iy, Ax) + sp.kron(Ay, Ix)
-
-# 2) Build upwind advection operator (upwind_1d already enforces zero advective flux at boundaries)
-def upwind_1d(N, d, v):
-    if v > 0:
-        data, offsets = [np.ones(N-1), -np.ones(N-1)], [0, -1]
-    else:
-        data, offsets = [-np.ones(N-1), np.ones(N-1)], [1, 0]
-    A_int = sp.diags(data, offsets, shape=(N-1, N-1), format='csr') / d
-    A = sp.lil_matrix((N, N))
-    A[1:, 1:] = A_int
-    return A.tocsr()
-
-Dx = upwind_1d(Nx, dx, vx)
-Dy = upwind_1d(Ny, dy, vy)
-Adv_x = sp.kron(Iy, Dx) * vx
-Adv_y = sp.kron(Dy, Ix) * vy
-
-# Combined operator
-Operator = -Adv_x - Adv_y + D * Laplacian
-
-# 3) Initial condition
-x = np.linspace(0, Lx, Nx)
-y = np.linspace(0, Ly, Ny)
+# --- 2. Setup the Numerical Grid (Identical to before) ---
+dx = WIDTH / (NX - 1)
+dy = HEIGHT / (NY - 1)
+x = np.linspace(0, WIDTH, NX)
+y = np.linspace(0, HEIGHT, NY)
 X, Y = np.meshgrid(x, y)
-sigma = 0.05
-c = np.exp(-((X-0.5)**2 + (Y-0.5)**2) / (2 * sigma**2)).flatten()
 
-# 4) Time-stepping parameters
-dt_adv = min(dx, dy) / (max(abs(vx), abs(vy)) + 1e-6) * 0.5
-dt_diff = dx * dy / (4 * D) * 0.5
-dt = min(dt_adv, dt_diff)
-n_steps = 200
+# --- 3. Set Initial Conditions (Identical to before) ---
+C = np.zeros((NY, NX))
+C = C0 * np.exp(-((X - X0)**2 + (Y - Y0)**2) / (2 * SIGMA**2))
 
-# 5) Precompute frames
-frames = []
-for _ in range(n_steps):
-    c = c + dt * Operator.dot(c)
-    frames.append(c.reshape((Ny, Nx)))
+ux = np.full((NY, NX), UX_INITIAL)
+uy = np.full((NY, NX), UY_INITIAL)
+ux[0, :] = 0; ux[-1, :] = 0; ux[:, 0] = 0; ux[:, -1] = 0
+uy[0, :] = 0; uy[-1, :] = 0; uy[:, 0] = 0; uy[:, -1] = 0
 
-# 6) Plot & animate
-fig, ax = plt.subplots(figsize=(5, 5))
-im = ax.imshow(frames[0], origin='lower', extent=(0, Lx, 0, Ly))
-ax.set_title('Time step 0')
-ax.set_xlabel('x'); ax.set_ylabel('y')
+def simulate_step_stable(C, ux, uy):
+    """
+    Performs one time step using a STABLE UPWIND SCHEME for advection.
+    """
+    Cn = C.copy()
 
-def update(i):
-    im.set_data(frames[i])
-    ax.set_title(f'Time step {i}')
-    return [im]
+    # --- ★★★ KEY CHANGE: UPWIND SCHEME for Advection Term ★★★ ---
+    # The diffusion term remains a central difference scheme.
+    # We assume ux is always positive and uy is zero in this specific problem.
+    # A general implementation would check the sign of u at each point.
 
-anim = FuncAnimation(fig, update, frames=range(0, n_steps, 5), blit=True)
-anim.save('advection_diffusion_neumann.gif', writer=PillowWriter(fps=30))
+    advection_x = ux[1:-1, 1:-1] * DT / dx * (Cn[1:-1, 1:-1] - Cn[1:-1, 0:-2])
+
+    # Since uy is zero, advection_y is zero, but we write it for completeness.
+    # This assumes uy is positive. A full implementation needs a check.
+    advection_y = uy[1:-1, 1:-1] * DT / dy * (Cn[1:-1, 1:-1] - Cn[0:-2, 1:-1])
+
+    diffusion_x = D * DT / dx**2 * (Cn[1:-1, 2:] - 2 * Cn[1:-1, 1:-1] + Cn[1:-1, 0:-2])
+    diffusion_y = D * DT / dy**2 * (Cn[2:, 1:-1] - 2 * Cn[1:-1, 1:-1] + Cn[0:-2, 1:-1])
+
+    C[1:-1, 1:-1] = Cn[1:-1, 1:-1] - advection_x - advection_y + diffusion_x + diffusion_y
+    # --- End of Key Change ---
+
+    # Apply No-Flux Neumann Boundary Conditions for Concentration
+    C[0, :] = C[1, :]
+    C[-1, :] = C[-2, :]
+    C[:, 0] = C[:, 1]
+    C[:, -1] = C[:, -2]
+    return C
+
+# --- Animation Setup ---
+fig, ax = plt.subplots(figsize=(8, 7))
+pcm = ax.pcolormesh(X, Y, C, cmap='viridis', vmin=0, vmax=C0)
+fig.colorbar(pcm, ax=ax, label='Concentration')
+ax.set_title("Gas Dispersion at t = 0.0 s")
+ax.set_xlabel("X (m)")
+ax.set_ylabel("Y (m)")
+ax.set_aspect('equal', adjustable='box')
+
+def update(frame):
+    global C, ux, uy
+    current_time = frame * DT
+
+    current_ux_val = UX_INITIAL * np.exp(-DECAY_RATE * current_time)
+    current_uy_val = UY_INITIAL * np.exp(-DECAY_RATE * current_time)
+
+    ux[1:-1, 1:-1] = current_ux_val
+    uy[1:-1, 1:-1] = current_uy_val
+
+    # Use the new stable simulation function
+    C = simulate_step_stable(C, ux, uy)
+
+    pcm.set_array(C.ravel())
+    ax.set_title(f"Stable Simulation at t = {current_time:.1f} s")
+
+    return [pcm]
+
+print("Starting stable simulation with Upwind Scheme...")
+anim = FuncAnimation(fig, update, frames=NT, interval=30, blit=True)
+anim.save('fart_dispersion_stable.gif', writer='pillow', fps=25)
+plt.close()
+print("Stable animation saved as 'fart_dispersion_stable.gif'")
