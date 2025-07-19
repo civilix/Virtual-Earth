@@ -14,11 +14,11 @@ class FlatusSimulator:
     def __init__(self, source_choice_1_to_9: int, wind_angle_degrees: float):
         internal_source_index = source_choice_1_to_9 - 1
         self.WIDTH, self.HEIGHT = 2.0, 2.0
-        self.NX, self.NY = 101, 101
+        self.NX, self.NY = 201, 201
         self.DT = 0.02
-        self.TOTAL_TIME = 3.0
+        self.TOTAL_TIME = 10.0
         self.NT = int(self.TOTAL_TIME / self.DT)
-        self.D = 0.000016
+        self.D = 0.01
         self.C0 = 1.0
         self.SIGMA = 0.075
         self.INITIAL_SPEED = 1.0
@@ -98,7 +98,7 @@ class FlatusSimulator:
         self.pcm = self.ax.pcolormesh(self.X, self.Y, self.C, cmap='viridis', vmin=0, vmax=self.C0)
         self.fig.colorbar(self.pcm, ax=self.ax, label='Concentration')
         self.spectator_plot = self.ax.scatter(self.detector_coords[:, 0], self.detector_coords[:, 1], c=self.COLOR_SAFE, s=50, edgecolors='white', zorder=3)
-        self.ax.set_title(f"Gas Dispersion at t = 0.0 s")
+        self.ax.set_title("Gas Dispersion at t = 0.0 s")
         self.ax.set_xlabel("X (m)")
         self.ax.set_ylabel("Y (m)")
         self.ax.set_aspect('equal', adjustable='box')
@@ -114,7 +114,7 @@ if __name__ == "__main__":
         source_choice_1_to_9=SOURCE_CHOICE_1_to_9,
         wind_angle_degrees=WIND_ANGLE_DEGREES
     )
-    output_filename = f'dispersion_{SOURCE_CHOICE_1_to_9}_{int(WIND_ANGLE_DEGREES)}.gif'
+    output_filename = f'src_{SOURCE_CHOICE_1_to_9}_ang_{int(WIND_ANGLE_DEGREES)}.gif'
     simulator.run(
         save_filename=output_filename,
         playback_slowdown_factor=PLAYBACK_FACTOR
